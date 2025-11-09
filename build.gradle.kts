@@ -2,6 +2,7 @@ plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.1.0"
     id("org.jetbrains.intellij.platform") version "2.7.1"
+    id("org.jetbrains.grammarkit") version "2022.3.2.2"
 }
 
 group = "com.raytex"
@@ -29,6 +30,12 @@ dependencies {
     }
 }
 
+sourceSets {
+    main {
+        java.srcDirs("src/main/java", "gen")
+        resources.srcDir("src/main/resources")
+    }
+}
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
@@ -44,8 +51,11 @@ intellijPlatform {
 tasks {
     // Set the JVM compatibility versions
     withType<JavaCompile> {
-        sourceCompatibility = "21"
-        targetCompatibility = "21"
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
+    }
+    withType<Copy> {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
 }
 

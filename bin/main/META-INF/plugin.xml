@@ -28,7 +28,7 @@
     </extensions>
     <actions>
         <action id="com.raytex.raytex.RaytexRender" class="com.raytex.raytex.RaytexRender"
-                text="Raytex: Render LaTeX">
+                text="render latex">
             <add-to-group group-id="ToolsMenu"/>
         </action>
     </actions>
