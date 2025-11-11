@@ -18,13 +18,20 @@ import org.jetbrains.annotations.Debug;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static com.intellij.psi.util.PsiEditorUtil.getPsiFile;
 
 public class RaytexRender extends AnAction {
+    private final CopyOnWriteArrayList<Inlay<?>> inlays = new CopyOnWriteArrayList<Inlay<?>>();
+    private final CopyOnWriteArrayList<FoldRegion> folds = new CopyOnWriteArrayList<FoldRegion>();
+
     private void renderInlineComment(Editor editor, RaytexRenderEntry entry) {
+        clearAllInlays(editor);
+
         FoldingModel foldingModel = editor.getFoldingModel();
         foldingModel.runBatchFoldingOperation(() -> {
             for (FoldRegion region : editor.getFoldingModel().getAllFoldRegions()) {
@@ -43,9 +50,12 @@ public class RaytexRender extends AnAction {
         ApplicationManager.getApplication().invokeLater(() -> {
             RaytexElementRenderer renderer = new RaytexElementRenderer(entry, entry.color);
             int offset = Math.max(0, entry.start - 1);
-            inlayModel.addInlineElement(offset, true, renderer);
+            Inlay<?> inlay = inlayModel.addInlineElement(offset, true, renderer);
+
+            if (inlay != null) inlays.add(inlay);
         });
 
+        // This is some formula: $$E = mc^2$$. Its super cool!
         CaretListener listener = new CaretListener() {
             @Override
             public void caretPositionChanged(final @NotNull CaretEvent e) {
@@ -59,6 +69,15 @@ public class RaytexRender extends AnAction {
             }
         };
         editor.getCaretModel().addCaretListener(listener);
+    }
+
+    private void clearAllInlays(Editor editor) {
+        for (Inlay<?> inlay : inlays) {
+            if (inlay.isValid() && inlay.getEditor().equals(editor)) {
+                inlay.dispose();
+                inlays.remove(inlay);
+            }
+        }
     }
 
     private void renderBlockComment(Editor editor, RaytexRenderEntry entry) {
@@ -75,6 +94,8 @@ public class RaytexRender extends AnAction {
         Editor editor = RaytexHelper.getEditor(project);
         PsiFile psiFile = getPsiFile(editor);
 
+        if (psiFile == null || editor == null) return;
+
         psiFile.accept(new PsiRecursiveElementWalkingVisitor() {
             @Override
             public void visitComment(@NotNull PsiComment comment) {
@@ -85,40 +106,44 @@ public class RaytexRender extends AnAction {
 
                 while (lexer.getTokenType() != null) {
                     if (lexer.getTokenType() == RaytexTokenTypes.LATEX_DELIM) {
-                        int start = lexer.getTokenEnd();
+                        int delimStart = lexer.getTokenStart();
                         lexer.advance();
 
                         StringBuilder latexBuilder = new StringBuilder();
-                        int contentStart = start;
+                        int contentStart = delimStart;
 
-                        while (lexer.getTokenType() != null &&
-                                lexer.getTokenType() != RaytexTokenTypes.LATEX_DELIM) {
+                        while (lexer.getTokenType() != null && lexer.getTokenType() != RaytexTokenTypes.LATEX_DELIM) {
                             if (lexer.getTokenType() == RaytexTokenTypes.COMMENT_TEXT) {
                                 latexBuilder.append(text, lexer.getTokenStart(), lexer.getTokenEnd());
                             }
                             lexer.advance();
                         }
 
-                        int contentEnd = lexer.getTokenStart();
-                        String latex = latexBuilder.toString().trim();
+                        int delimEnd = lexer.getTokenEnd();
 
-                        int globStart = comment.getTextRange().getStartOffset() + contentStart;
-                        int globEnd = comment.getTextRange().getStartOffset() + contentEnd;
+                        String latex = latexBuilder.toString().trim();
+                        if (latex.isEmpty()) {
+                            lexer.advance();
+                            continue;
+                        }
+
+                        int globStart = comment.getTextRange().getStartOffset() + delimStart;
+                        int globEnd = comment.getTextRange().getStartOffset() + delimEnd;
 
                         RaytexRenderEntry entry = new RaytexRenderEntry(
                                 latex,
-                                editor.getColorsScheme().getAttributes(
-                                        DefaultLanguageHighlighterColors.LINE_COMMENT
-                                ).getForegroundColor(),
+                                editor.getColorsScheme()
+                                        .getAttributes(DefaultLanguageHighlighterColors.LINE_COMMENT)
+                                        .getForegroundColor(),
                                 true,
                                 null,
                                 globStart,
                                 globEnd
                         );
+
                         renderInlineComment(editor, entry);
-                    } else {
-                        lexer.advance();
                     }
+                    lexer.advance();
                 }
                 super.visitComment(comment);
             }

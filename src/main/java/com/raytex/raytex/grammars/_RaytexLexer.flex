@@ -10,6 +10,7 @@ import static com.raytex.raytex.grammars.RaytexTokenTypes.*;
 %function advance
 %type IElementType
 %unicode
+%state YYINITIAL
 
 WHITE_SPACE = [ \t\n\r]+
 LATEX_DELIM = \$\$
